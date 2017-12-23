@@ -1,4 +1,20 @@
+import defs
+from paraser import Parser
+import sema
 
+class SymbolTable(object):
+    def __init__(self):
+        self.pairs = {}
+        pass
+
+    def add(self, symbol, value):
+        """
+        Do not check that it exists - just add
+        """
+        self.pairs[symbol] = value
+
+    def exists(self, symbol):
+        return (symbol in self.pairs.keys())
 
 class Compiler(object):
     """
@@ -33,12 +49,40 @@ class Compiler(object):
                 translation
             - Write the translated instruction to he output file
         """
-        pass
-#        with Parser(path) as p:
-#            # fetch the next instruction
-#            inst = p.next()
-#            # for each instruction, 
-#            while inst is not None:
+        #
+        # Initialization: initialize the SymbolTable
+        #
+        stable = SymbolTable()
+
+        #
+        # Initialization: Add predefined symbols
+        #
+        for symbol,value in defs.predefinedSymbols:
+            stable.add(symbol, value)
+
+        #
+        # First Pass
+        #
+        with Parser(path) as p:
+            command = p.next()
+            while command is not None:
+                instruction = sema.sema(command)
+                if instruction.is_symbol_decl():
+                    #
+                    # TODO: address should be properly assigned
+                    #
+                    address = 0
+                    stable.add(instruction.symbol, address)
+                p.next()
+
+        #
+        # Second Pass
+        #
+        with Parser(path) as p:
+            command = p.next()
+            while command is not None:
+                p.next()
+                pass
 
     def interpret(self, s):
         """
