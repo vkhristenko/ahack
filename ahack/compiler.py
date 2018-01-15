@@ -1,5 +1,5 @@
 import defs
-from paraser import Parser
+from parser import Parser
 from codegen import CodeGen
 import sema
 
@@ -16,6 +16,32 @@ class SymbolTable(object):
 
     def exists(self, symbol):
         return (symbol in self.pairs.keys())
+
+class InputFeeder(object):
+    def __init__(self, path):
+        self,path = path
+
+    def next(self):
+        return None
+
+    def __enter__(self):
+        self.f = open(self.path)
+
+    def __exit__(self):
+        self.f.close()
+
+class OutputFeeder(object):
+    def __init__(self, path):
+        self.path = path
+
+    def next(self, instruction):
+        self.f.write(instruction+"\n")
+
+    def __enter__(self):
+        self.f = open(self.path)
+
+    def __exit__(self):
+        self.f.close()
 
 class Compiler(object):
     """
@@ -50,21 +76,19 @@ class Compiler(object):
                 translation
             - Write the translated instruction to he output file
         """
-        #
-        # Initialization: initialize the SymbolTable
+        # 
+        # Create a Symbol Table and add all the predefined symbols
+        # Create a Parser
         #
         stable = SymbolTable()
+        psr = Parser()
+        for symbol,value in defs.predefinedSymbols:
+            self.stable.add(symbol, value)
 
         #
         # Initialize the Code Generator
         #
         translator = CodeGen(path.replace(".asm", ".hack"))
-
-        #
-        # Initialization: Add predefined symbols
-        #
-        for symbol,value in defs.predefinedSymbols:
-            stable.add(symbol, value)
 
         #
         # set the current memory address to be 16
@@ -76,58 +100,56 @@ class Compiler(object):
         #
         # First Pass
         #
-        with Parser(path) as p:
-            command = p.next()
-            while command is not None:
-                instruction = sema.sema(command)
-                if instruction.is_symbol_decl():
+        with InputFeeder(path) as feeder:
+            cmd_str = feeder.next()
+            while cmd_str is not None:
+                token = psr.parse(cmd_str)
+                if token.is_symbol_decl():
                     # if this is a pseudo command which declares the 
                     # goto label
                     address = currentInstruction
-                    stable.add(instruction.symbol, address)
+                    stable.add(token.symbol, address)
                     # decrement 1 cause we gonna increment down the road
                     currentInstruction-=1
-                p.next()
+                cmd_str = feeder.next()
                 currentInstruction+=1
 
         #
         # Second Pass
         #
-        with Parser(path) as p:
-            command = p.next()
-            while command is not None:
-                instruction = sema.sema(command)
-                #
-                # check that we are getting the symbol decl again
-                # just ignore it completely
-                #
-                if instruction.is_symbol_decl():
-                    currentInstruction-=1
+        currentInstruction = 0
+        with InputFeeder(path) as feeder:
+            with OutputFeeder(path.replace(".asm", ".hack")) as out:
+                cmd = feeder.next()
+                while cmd is not None:
+                    token = psr.parse(cmd_str)
+                    #
+                    # check that we are getting the symbol decl again
+                    # just ignore it completely
+                    #
+                    if token.is_symbol_decl(): 
+                        feeder.next()
+                        continue
 
-                #
-                # If this is a variable decl
-                #
-                if instruction.is_var_decl():
-                    if not stable.exists(instruction.symbol):
-                        stable.add(instruction.symbol, currentMemorySlot)
-                        currentMemorySlot+=1
+                    #
+                    # If this is a variable decl
+                    #   add this variable to the Symbol Table
+                    #
+                    if token.is_var_decl():
+                        if not stable.exists(instruction.symbol):
+                            stable.add(instruction.symbol, currentMemorySlot)
+                            currentMemorySlot+=1
 
-                #
-                # code generation:
-                # Symbol Table is complete with either variables or label decls
-                #
-                translator.translate(instruction, stable)
+                    #
+                    # code generation:
+                    # Symbol Table is complete with either variables or label decls
+                    # We equip each token with the knowledge how to translate itself
+                    #
+                    instruction = token.translate(stable)
 
-                #
-                # At this stage we have a meaningful instruction
-                # We have to geneate code for it
-                #
-                p.next()
-                currentInstruction++1
-
-    def interpret(self, s):
-        """
-        Interpret a given string - generate the machine code...
-        no execution...
-        """
-        pass
+                    #
+                    # At this stage we have a meaningful instruction
+                    # We have to geneate code for it
+                    #
+                    feeder.next()
+                    currentInstruction+=1

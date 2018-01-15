@@ -1,20 +1,13 @@
+class Token(object):
+    def __init__(self):
+        pass
+
 class Parser(object):
     """
     Parser Class - 
     """
     def __init__(self, path):
-        self.path = path
-
-    def next(self):
-        """
-        retrieve the next instruction
-        """
         pass
 
-    def __enter__(self):
-        self.f = open(self.path)
+    def parse(self, cmd):
         pass
-
-    def __exit__(self):
-        # just close the input file
-        self.f.close()
