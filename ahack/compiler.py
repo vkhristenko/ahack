@@ -104,6 +104,11 @@ class Compiler(object):
             cmd_str = feeder.next()
             while cmd_str is not None:
                 token = psr.parse(cmd_str)
+                
+                if token.is_white_space():
+                    feeder.next()
+                    continue
+
                 if token.is_symbol_decl():
                     # if this is a pseudo command which declares the 
                     # goto label
@@ -123,6 +128,14 @@ class Compiler(object):
                 cmd = feeder.next()
                 while cmd is not None:
                     token = psr.parse(cmd_str)
+
+                    #
+                    # check if that is the white space
+                    # 
+                    if token.is_white_space():
+                        feeder.next()
+                        continue
+
                     #
                     # check that we are getting the symbol decl again
                     # just ignore it completely
@@ -146,6 +159,11 @@ class Compiler(object):
                     # We equip each token with the knowledge how to translate itself
                     #
                     instruction = token.translate(stable)
+
+                    #
+                    # write the machine level instruction to the output file
+                    #
+                    out.next(instruction)
 
                     #
                     # At this stage we have a meaningful instruction
