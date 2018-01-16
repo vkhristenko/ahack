@@ -1,7 +1,5 @@
-import defs
+import defs, codegen
 from parser import Parser
-from codegen import CodeGen
-import sema
 
 class SymbolTable(object):
     def __init__(self):
@@ -15,33 +13,16 @@ class SymbolTable(object):
         self.pairs[symbol] = value
 
     def exists(self, symbol):
+        """
+        Check if this symbol is in the Table
+        """
         return (symbol in self.pairs.keys())
 
-class InputFeeder(object):
-    def __init__(self, path):
-        self,path = path
-
-    def next(self):
-        return None
-
-    def __enter__(self):
-        self.f = open(self.path)
-
-    def __exit__(self):
-        self.f.close()
-
-class OutputFeeder(object):
-    def __init__(self, path):
-        self.path = path
-
-    def next(self, instruction):
-        self.f.write(instruction+"\n")
-
-    def __enter__(self):
-        self.f = open(self.path)
-
-    def __exit__(self):
-        self.f.close()
+    def getAddress(self, symbol):
+        """
+        Get the Address of the symbol
+        """
+        return self.pairs[symbol]
 
 class Compiler(object):
     """
@@ -81,93 +62,64 @@ class Compiler(object):
         # Create a Parser
         #
         stable = SymbolTable()
-        psr = Parser()
         for symbol,value in defs.predefinedSymbols:
             self.stable.add(symbol, value)
 
         #
-        # Initialize the Code Generator
-        #
-        translator = CodeGen(path.replace(".asm", ".hack"))
-
-        #
-        # set the current memory address to be 16
         # set the current instruction number to be 0
         #
-        currentMemorySlot = 16
         currentInstruction = 0
 
         #
-        # First Pass
+        # First Pass: Add Label Declarations into the SymbolTable
         #
-        with InputFeeder(path) as feeder:
-            cmd_str = feeder.next()
-            while cmd_str is not None:
-                token = psr.parse(cmd_str)
-                
-                if token.is_white_space():
-                    feeder.next()
+        with Parser(path) as p:
+            while p.hasMoreCommands:
+                # read the next command
+                p.advance()
+
+                # if this is a label declaration => add to the Symbol Table
+                if p.commandType() == p.L_COMMAND:
+                    stable.add(p.symbol(), currentInstruction)
                     continue
 
-                if token.is_symbol_decl():
-                    # if this is a pseudo command which declares the 
-                    # goto label
-                    address = currentInstruction
-                    stable.add(token.symbol, address)
-                    # decrement 1 cause we gonna increment down the road
-                    currentInstruction-=1
-                cmd_str = feeder.next()
+                # increment the instruction number and continue
                 currentInstruction+=1
 
         #
         # Second Pass
-        #
-        currentInstruction = 0
-        with InputFeeder(path) as feeder:
-            with OutputFeeder(path.replace(".asm", ".hack")) as out:
-                cmd = feeder.next()
-                while cmd is not None:
-                    token = psr.parse(cmd_str)
+        # 
+        with Parser(path) as p:
+            # open up the output file
+            with open(path.replace(".asm", ".hack"), "w") as outFile:
+                # set the instruction back to 0
+                currentInstruction = 0
+                # set the starting memory slot to 16 - for variable declarations
+                currentMemorySlot = 16
 
-                    #
-                    # check if that is the white space
-                    # 
-                    if token.is_white_space():
-                        feeder.next()
-                        continue
+                # read in the next command
+                p.advance()
 
-                    #
-                    # check that we are getting the symbol decl again
-                    # just ignore it completely
-                    #
-                    if token.is_symbol_decl(): 
-                        feeder.next()
-                        continue
+                # if this is the L_COMMAND -> continue
+                if p.commandType() == p.L_COMMAND:
+                    continue
 
-                    #
-                    # If this is a variable decl
-                    #   add this variable to the Symbol Table
-                    #
-                    if token.is_var_decl():
-                        if not stable.exists(instruction.symbol):
-                            stable.add(instruction.symbol, currentMemorySlot)
-                            currentMemorySlot+=1
+                # if this is A-instruction
+                if p.commandType() == p.A_COMMAND:
+                    # if @symbol is in the symbol table -> it's a string else decimal
+                    if stable.exists(p.symbol()):
+                        hack_instruction = format(stable.getAddress(p.symbol()),
+                            "016b")
+                    else:
+                        hack_instruction = format(p.symbol(), "016b")
+                elif p.commandType() == p.C_COMMAND:
+                    hack_instruction = "111" + codegen.comp(p.comp()) +\
+                                       codegen.dest(p.dest()) + codegen.jump(p.jump())
+                else:
+                    raise NotImplementedError("There are only 3 types of commands for the Hack Assembly Specification")
 
-                    #
-                    # code generation:
-                    # Symbol Table is complete with either variables or label decls
-                    # We equip each token with the knowledge how to translate itself
-                    #
-                    instruction = token.translate(stable)
+                # write to the output file
+                outFile.write(hack_instruction+"\n")
 
-                    #
-                    # write the machine level instruction to the output file
-                    #
-                    out.next(instruction)
-
-                    #
-                    # At this stage we have a meaningful instruction
-                    # We have to geneate code for it
-                    #
-                    feeder.next()
-                    currentInstruction+=1
+                # increment the instruction's counter
+                currentInstruction+=1
