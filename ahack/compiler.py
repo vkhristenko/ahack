@@ -1,6 +1,7 @@
 import defs, codegen
 from parser import Parser
 import logging
+import copy
 
 class SymbolTable(object):
     def __init__(self):
@@ -11,7 +12,7 @@ class SymbolTable(object):
         """
         Do not check that it exists - just add
         """
-        self.pairs[symbol] = value
+        self.pairs[symbol] = copy.copy(value)
 
     def exists(self, symbol):
         """
@@ -58,6 +59,8 @@ class Compiler(object):
                 translation
             - Write the translated instruction to he output file
         """
+        self.logger.info("Compiling hack assembly file: %s" % path)
+
         # 
         # Create a Symbol Table and add all the predefined symbols
         # Create a Parser
@@ -101,6 +104,7 @@ class Compiler(object):
                 currentInstruction = 0
                 # set the starting memory slot to 16 - for variable declarations
                 currentMemorySlot = 16
+                inc_memory = False
 
                 while p.hasMoreCommands():
                     # parse the next command line
@@ -116,6 +120,8 @@ class Compiler(object):
                         if not p.symbol().isdigit():
                             if not stable.exists(p.symbol()):
                                 stable.add(p.symbol(), currentMemorySlot)
+                                # we must follow up to the next memory slot
+                                currentMemorySlot += 1
                             hack_instruction = format(stable.getAddress(p.symbol()),
                                 "016b")
                         else:

@@ -39,6 +39,8 @@ class Parser(object):
 
     def advance(self):
         self.logger.debug("Parser.advance: line=%s" % self.line)
+        if "//" in self.line:
+            self.line = self.line.split("//")[0]
         if self.line.startswith("@"):
             self._symbol = self.line[1:]
             self.type = self.A_COMMAND
