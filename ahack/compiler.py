@@ -1,5 +1,6 @@
 import defs, codegen
 from parser import Parser
+import logging
 
 class SymbolTable(object):
     def __init__(self):
@@ -29,7 +30,7 @@ class Compiler(object):
     Hack Assembly Compiler - top abstraction. 
     """
     def __init__(self):
-        pass
+        self.logger = logging.getLogger("ahack")
 
     def compile(self, path):
         """
@@ -61,9 +62,10 @@ class Compiler(object):
         # Create a Symbol Table and add all the predefined symbols
         # Create a Parser
         #
+        self.logger.info("Phase: Initialization")
         stable = SymbolTable()
         for symbol,value in defs.predefinedSymbols:
-            self.stable.add(symbol, value)
+            stable.add(symbol, value)
 
         #
         # set the current instruction number to be 0
@@ -73,12 +75,14 @@ class Compiler(object):
         #
         # First Pass: Add Label Declarations into the SymbolTable
         #
-        with Parser(path) as p:
-            while p.hasMoreCommands:
+        self.logger.info("Phase: First Pass")
+        with Parser(path, self.logger) as p:
+            while p.hasMoreCommands():
                 # read the next command
                 p.advance()
 
                 # if this is a label declaration => add to the Symbol Table
+                # and proceed to the next instruction in the loop
                 if p.commandType() == p.L_COMMAND:
                     stable.add(p.symbol(), currentInstruction)
                     continue
@@ -89,7 +93,8 @@ class Compiler(object):
         #
         # Second Pass
         # 
-        with Parser(path) as p:
+        self.logger.info("Phase: Second Pass")
+        with Parser(path, self.logger) as p:
             # open up the output file
             with open(path.replace(".asm", ".hack"), "w") as outFile:
                 # set the instruction back to 0
@@ -97,29 +102,34 @@ class Compiler(object):
                 # set the starting memory slot to 16 - for variable declarations
                 currentMemorySlot = 16
 
-                # read in the next command
-                p.advance()
+                while p.hasMoreCommands():
+                    # parse the next command line
+                    p.advance()
 
-                # if this is the L_COMMAND -> continue
-                if p.commandType() == p.L_COMMAND:
-                    continue
+                    # if this is the L_COMMAND -> continue
+                    if p.commandType() == p.L_COMMAND:
+                        continue
 
-                # if this is A-instruction
-                if p.commandType() == p.A_COMMAND:
-                    # if @symbol is in the symbol table -> it's a string else decimal
-                    if stable.exists(p.symbol()):
-                        hack_instruction = format(stable.getAddress(p.symbol()),
-                            "016b")
+                    # if this is A-instruction
+                    if p.commandType() == p.A_COMMAND:
+                        # if this is not an int => check if in stable
+                        if not p.symbol().isdigit():
+                            if not stable.exists(p.symbol()):
+                                stable.add(p.symbol(), currentMemorySlot)
+                            hack_instruction = format(stable.getAddress(p.symbol()),
+                                "016b")
+                        else:
+                            hack_instruction = format(int(p.symbol()), "016b")
+                    elif p.commandType() == p.C_COMMAND:
+                        hack_instruction = "111" + codegen.comp(p.comp()) +\
+                                        codegen.dest(p.dest())+\
+                                        codegen.jump(p.jump())
                     else:
-                        hack_instruction = format(p.symbol(), "016b")
-                elif p.commandType() == p.C_COMMAND:
-                    hack_instruction = "111" + codegen.comp(p.comp()) +\
-                                       codegen.dest(p.dest()) + codegen.jump(p.jump())
-                else:
-                    raise NotImplementedError("There are only 3 types of commands for the Hack Assembly Specification")
+                        raise NotImplementedError("There are only 3 types of commands for the Hack Assembly Specification")
 
-                # write to the output file
-                outFile.write(hack_instruction+"\n")
+                    # write to the output file
+                    self.logger.debug("hack instruction = %s" % hack_instruction)
+                    outFile.write(hack_instruction+"\n")
 
-                # increment the instruction's counter
-                currentInstruction+=1
+                    # increment the instruction's counter
+                    currentInstruction+=1

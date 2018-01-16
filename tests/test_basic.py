@@ -1,4 +1,10 @@
 import os, sys
+import logging
+
+#
+# logging configuration
+#
+logging.basicConfig(level=logging.INFO)
 
 #
 # insert path to the package explicitly into the PYTHONPATH
@@ -14,7 +20,7 @@ from ahack.compiler import Compiler
 # some inits
 #
 c = Compiler()
-path = "test_asm_file.asm"
+path = "/Users/vk/software/BuildComputer/soft/nand2tetris/projects/06/pong/Pong.asm"
 
 #
 # Compile 
